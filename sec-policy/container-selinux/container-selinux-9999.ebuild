@@ -3,26 +3,26 @@
 
 EAPI="6"
 
-inherit coreos-sec-policy eutils
+inherit eutils
 
 DESCRIPTION="SELinux policy for container-selinux"
-HOMEPAGE="https://github.com/projectatomic/container-selinux"
+HOMEPAGE="https://github.com/containers/container-selinux"
 LICENSE="GPL-2"
 SLOT="0"
 
 if [[ ${PV} == 9999* ]]; then
-	EGIT_REPO_URI="https://github.com/projectatomic/container-selinux.git"
+	EGIT_REPO_URI="https://github.com/containers/container-selinux.git"
 	EGIT_BRANCH="master"
 	EGIT_CHECKOUT_DIR="${WORKDIR}/refpolicy"
 	inherit git-r3
 else
-	SRC_URI="https://github.com/projectatomic/container-selinux/archive/v${PV}.tar.gz"
+	SRC_URI="https://github.com/containers/container-selinux/archive/v${PV}.tar.gz"
 	KEYWORDS="amd64 arm64"
 fi
 
 IUSE=""
 
-DEPEND="sec-policy/selinux-base"
+DEPEND="<sec-policy/selinux-base-9999"
 
 src_prepare() {
 	local config="${EROOT}"/usr/lib/selinux/config
@@ -33,15 +33,23 @@ src_prepare() {
 	SELINUX_MAKEFILE="${EROOT}"/usr/share/selinux/${SELINUX_TYPE}/include/Makefile
 	[ -f  ${SELINUX_MAKEFILE} ] || die "Can't find ${SELINUX_MAKEFILE}"
 
-	epatch "${FILESDIR}"/0001-2.46.0-Fixups-for-Container-Linux.patch
+	POLICY_TYPES="mcs mls targeted"
+
+	epatch "${FILESDIR}"/0001-2.132.0-fix-container-selinux-flatcar.patch
 	eapply_user
 }
 
 src_compile() {
-	emake NAME=${SELINUX_TYPE} -f "${SELINUX_MAKEFILE}" container.pp \
+	emake NAME=${SELINUX_TYPE} SHAREDIR="${EROOT}"/usr/share/selinux \
+		-f "${SELINUX_MAKEFILE}" container.pp \
 		|| die "compile failed"
 }
 
 src_install() {
-	die "TODO"
+	for type in ${POLICY_TYPES}; do
+		insinto /usr/share/selinux/${type}
+		if [[ -f "${S}"/container.pp ]]; then
+			doins "${S}"/container.pp || die "Failed to add container.pp to /usr/share/selinux/${type}"
+		fi
+	done
 }
