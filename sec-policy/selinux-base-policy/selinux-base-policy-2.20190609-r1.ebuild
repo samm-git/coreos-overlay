@@ -69,7 +69,7 @@ src_prepare() {
 
 src_compile() {
 	for i in ${POLICY_TYPES}; do
-		emake NAME=$i SHAREDIR="${ROOT%/}"/usr/share/selinux -C "${S}"/${i}
+		emake BINDIR="${ROOT}/usr/bin" NAME=$i SHAREDIR="${ROOT%/}"/usr/share/selinux -C "${S}"/${i}
 	done
 }
 
@@ -83,44 +83,4 @@ src_install() {
 			doins "${S}"/${i}/${j}.pp
 		done
 	done
-}
-
-pkg_postinst() {
-	# Set root path and don't load policy into the kernel when cross compiling
-	local root_opts=""
-	if [[ "${ROOT%/}" != "" ]]; then
-		root_opts="-p ${ROOT%/} -n"
-	fi
-
-	# Override the command from the eclass, we need to load in base as well here
-	local COMMAND="-i base.pp"
-	if has_version "<sys-apps/policycoreutils-2.5"; then
-		COMMAND="-b base.pp"
-	fi
-
-	for i in ${MODS}; do
-		COMMAND="${COMMAND} -i ${i}.pp"
-	done
-
-	for i in ${POLICY_TYPES}; do
-		einfo "Inserting the following modules, with base, into the $i module store: ${MODS}"
-
-		cd "${ROOT%/}/usr/share/selinux/${i}"
-
-		semodule ${root_opts} -s ${i} ${COMMAND}
-	done
-
-	# Don't relabel when cross compiling
-	if [[ "${ROOT%/}" == "" ]]; then
-		# Relabel depending packages
-		local PKGSET="";
-		if [[ -x /usr/bin/qdepends ]] ; then
-			PKGSET=$(/usr/bin/qdepends -Cq -r -Q ${CATEGORY}/${PN} | grep -v 'sec-policy/selinux-');
-		elif [[ -x /usr/bin/equery ]] ; then
-			PKGSET=$(/usr/bin/equery -Cq depends ${CATEGORY}/${PN} | grep -v 'sec-policy/selinux-');
-		fi
-		if [[ -n "${PKGSET}" ]] ; then
-			rlpkg ${PKGSET};
-		fi
-	fi
 }
