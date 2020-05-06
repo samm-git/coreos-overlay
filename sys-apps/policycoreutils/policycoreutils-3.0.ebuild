@@ -5,7 +5,7 @@ EAPI="6"
 PYTHON_COMPAT=( python{3_6,3_7} )
 PYTHON_REQ_USE="xml"
 
-inherit multilib python-r1 toolchain-funcs bash-completion-r1
+inherit multilib python-r1 toolchain-funcs bash-completion-r1 systemd
 
 MY_P="${P//_/-}"
 
@@ -15,7 +15,7 @@ SEMNG_VER="${PV}"
 SELNX_VER="${PV}"
 SEPOL_VER="${PV}"
 
-IUSE="audit dbus pam split-usr"
+IUSE="audit dbus extra nls pam python split-usr"
 REQUIRED_USE="${PYTHON_REQUIRED_USE}"
 
 DESCRIPTION="SELinux core utilities"
@@ -30,7 +30,7 @@ if [[ ${PV} == 9999 ]]; then
 	S="${S1}"
 else
 	SRC_URI="https://github.com/SELinuxProject/selinux/releases/download/${MY_RELEASEDATE}/${MY_P}.tar.gz
-		https://dev.gentoo.org/~perfinion/distfiles/policycoreutils-extra-${EXTRAS_VER}.tar.bz2"
+		extra? ( https://dev.gentoo.org/~perfinion/distfiles/policycoreutils-extra-${EXTRAS_VER}.tar.bz2 )"
 	KEYWORDS="amd64 ~arm64 ~mips x86"
 	S1="${WORKDIR}/${MY_P}"
 	S2="${WORKDIR}/policycoreutils-extra"
@@ -40,21 +40,25 @@ fi
 LICENSE="GPL-2"
 SLOT="0"
 
-DEPEND=">=sys-libs/libselinux-${SELNX_VER}:=[python,${PYTHON_USEDEP}]
+DEPEND=">=sys-libs/libselinux-${SELNX_VER}:=[python?,${PYTHON_USEDEP}]
 	>=sys-libs/libcap-1.10-r10:=
-	>=sys-libs/libsemanage-${SEMNG_VER}:=[python,${PYTHON_USEDEP}]
+	>=sys-libs/libsemanage-${SEMNG_VER}:=[python?,${PYTHON_USEDEP}]
 	sys-libs/libcap-ng:=
 	>=sys-libs/libsepol-${SEPOL_VER}:=
 	app-admin/setools[${PYTHON_USEDEP}]
-	sys-devel/gettext
-	dev-python/ipy[${PYTHON_USEDEP}]
+	nls? ( sys-devel/gettext )
+	python? (
+		dev-python/ipy[${PYTHON_USEDEP}]
+	)
 	dbus? (
 		sys-apps/dbus
 		dev-libs/dbus-glib:=
 	)
 	audit? ( >=sys-process/audit-1.5.1[python,${PYTHON_USEDEP}] )
 	pam? ( sys-libs/pam:= )
-	${PYTHON_DEPS}"
+	python? (
+		${PYTHON_DEPS}
+	)"
 
 ### libcgroup -> seunshare
 ### dbus -> restorecond
@@ -64,7 +68,9 @@ RDEPEND="${DEPEND}
 	app-misc/pax-utils"
 
 PDEPEND="sys-apps/semodule-utils
-	sys-apps/selinux-python"
+	python? (
+		sys-apps/selinux-python
+	)"
 
 src_unpack() {
 	# Override default one because we need the SRC_URI ones even in case of 9999 ebuilds
@@ -92,13 +98,26 @@ src_prepare() {
 
 	sed -i 's/-Werror//g' "${S1}"/*/Makefile || die "Failed to remove Werror"
 
-	python_copy_sources
-	# Our extra code is outside the regular directory, so set it to the extra
-	# directory. We really should optimize this as it is ugly, but the extra
-	# code is needed for Gentoo at the same time that policycoreutils is present
-	# (so we cannot use an additional package for now).
-	S="${S2}"
-	python_copy_sources
+	find -name Makefile -exec sed s/-Werror//g -i '{}' +
+
+	if use python ; then
+		python_copy_sources
+		# Our extra code is outside the regular directory, so set it to the extra
+		# directory. We really should optimize this as it is ugly, but the extra
+		# code is needed for Gentoo at the same time that policycoreutils is present
+		# (so we cannot use an additional package for now).
+		if use extra ; then
+			S="${S2}"
+			python_copy_sources
+		fi
+	else
+		for dir in audit2allow gui scripts \
+			semanage sepolicy sepolgen-ifgen
+		do
+			sed -e "s/ $dir / /" -i Makefile || die
+		done
+	fi
+	use nls || sed -e "s/ po / /" -i Makefile || die
 }
 
 src_compile() {
@@ -110,12 +129,24 @@ src_compile() {
 			INOTIFYH="$(usex dbus y n)" \
 			SESANDBOX="n" \
 			CC="$(tc-getCC)" \
+			DESTDIR="${ROOT}" \
 			LIBDIR="\$(PREFIX)/$(get_libdir)"
 	}
-	S="${S1}" # Regular policycoreutils
-	python_foreach_impl building
-	S="${S2}" # Extra set
-	python_foreach_impl building
+	if use python ; then
+		S="${S1}" # Regular policycoreutils
+		python_foreach_impl building
+		if use extra ; then
+			S="${S2}" # Extra set
+			python_foreach_impl building
+		fi
+	else
+		BUILD_DIR="${S1}"
+		building
+		if use extra ; then
+			BUILD_DIR="${S2}"
+			building
+		fi
+	fi
 }
 
 src_install() {
@@ -131,7 +162,9 @@ src_install() {
 			CC="$(tc-getCC)" \
 			LIBDIR="\$(PREFIX)/$(get_libdir)" \
 			install
-		python_optimize
+		if use python ; then
+			python_optimize
+		fi
 	}
 
 	installation-extras() {
@@ -139,14 +172,27 @@ src_install() {
 		emake -C "${BUILD_DIR}" \
 			DESTDIR="${D}" \
 			install
-		python_optimize
+		if use python ; then
+			python_optimize
+		fi
 	}
 
-	S="${S1}" # policycoreutils
-	python_foreach_impl installation-policycoreutils
-	S="${S2}" # extras
-	python_foreach_impl installation-extras
-	S="${S1}" # back for later
+	if use python ; then
+		S="${S1}" # policycoreutils
+		python_foreach_impl installation-policycoreutils
+		if use extra ; then
+			S="${S2}" # extras
+			python_foreach_impl installation-extras
+			S="${S1}" # back for later
+		fi
+	else
+		BUILD_DIR="${S1}"
+		installation-policycoreutils
+		if use extra ; then
+			BUILD_DIR="${S2}"
+			installation-extras
+		fi
+	fi
 
 	# remove redhat-style init script
 	rm -fR "${D}/etc/rc.d" || die
@@ -157,13 +203,15 @@ src_install() {
 	bashcomp_alias setsebool getsebool
 
 	# location for policy definitions
-	dodir /var/lib/selinux
-	keepdir /var/lib/selinux
+	dodir /usr/lib/selinux/policy
+	dosym ../../usr/lib/selinux/policy /var/lib/selinux
 
 	# Set version-specific scripts
-	for pyscript in rlpkg; do
-	  python_replicate_script "${ED}/usr/sbin/${pyscript}"
-	done
+	if use python ; then
+		for pyscript in rlpkg; do
+		  python_replicate_script "${ED}/usr/sbin/${pyscript}"
+		done
+	fi
 }
 
 pkg_postinst() {
