@@ -2,7 +2,7 @@
 # Distributed under the terms of the GNU General Public License v2
 
 EAPI="6"
-PYTHON_COMPAT=( python{3_6,3_7} )
+PYTHON_COMPAT=( python2_7 python3_6 )
 
 inherit multilib python-r1 toolchain-funcs multilib-minimal systemd
 
@@ -21,7 +21,7 @@ if [[ ${PV} == 9999 ]]; then
 	S="${WORKDIR}/${MY_P}/${PN}"
 else
 	SRC_URI="https://github.com/SELinuxProject/selinux/releases/download/${MY_RELEASEDATE}/${MY_P}.tar.gz"
-	KEYWORDS="~amd64 ~arm ~arm64 ~mips ~x86"
+	KEYWORDS="amd64 ~arm ~arm64 ~mips x86"
 	S="${WORKDIR}/${MY_P}"
 fi
 
@@ -50,7 +50,7 @@ RESTRICT="test"
 src_prepare() {
 	eapply_user
 
-	echo >> "${S}/src/semanage.conf"
+	echo "" >> "${S}/src/semanage.conf"
 	echo "# Set this to true to save the linked policy." >> "${S}/src/semanage.conf"
 	echo "# This is normally only useful for analysis" >> "${S}/src/semanage.conf"
 	echo "# or debugging of policy." >> "${S}/src/semanage.conf"
@@ -99,8 +99,9 @@ multilib_src_compile() {
 
 multilib_src_install() {
 	emake \
-		DEFAULT_SEMANAGE_CONF_LOCATION="${ED}/usr/lib/selinux/semanage.conf" \
-		LIBDIR="${EPREFIX}/usr/$(get_libdir)" \
+		DEFAULT_SEMANAGE_CONF_LOCATION="/usr/lib/selinux/semanage.conf" \
+		LIBDIR="/usr/$(get_libdir)" \
+		SHLIBDIR="/usr/$(get_libdir)" \
 		DESTDIR="${ED}" install
 
 	if multilib_is_native_abi && use python; then
@@ -113,25 +114,4 @@ multilib_src_install() {
 		python_foreach_impl installation_py
 	fi
 	systemd_dotmpfilesd "${FILESDIR}/tmpfiles.d/libsemanage.conf"
-}
-
-pkg_postinst() {
-	# Migrate the SELinux semanage configuration store if not done already
-	local selinuxtype=$(awk -F'=' '/SELINUXTYPE=/ {print $2}' "${EROOT}"/etc/selinux/config 2>/dev/null)
-	if [ -n "${selinuxtype}" ] && [ ! -d "${EROOT}"/var/lib/selinux/${selinuxtype}/active ] ; then
-		ewarn "Since the 2.4 SELinux userspace, the policy module store is moved"
-		ewarn "from /etc/selinux to /var/lib/selinux. The migration will be run now."
-		ewarn "If there are any issues, it can be done manually by running:"
-		ewarn "/usr/libexec/selinux/semanage_migrate_store"
-		ewarn "For more information, please see"
-		ewarn "- https://github.com/SELinuxProject/selinux/wiki/Policy-Store-Migration"
-	fi
-
-	# Run the store migration without rebuilds
-	for POLICY_TYPE in ${POLICY_TYPES} ; do
-		if [ ! -d "${EROOT}/var/lib/selinux/${POLICY_TYPE}/active" ] ; then
-			einfo "Migrating store ${POLICY_TYPE} (without policy rebuild)."
-			"${EROOT}/usr/libexec/selinux/semanage_migrate_store" -n -s "${POLICY_TYPE}" || die "Failed to migrate store ${POLICY_TYPE}"
-		fi
-	done
 }
