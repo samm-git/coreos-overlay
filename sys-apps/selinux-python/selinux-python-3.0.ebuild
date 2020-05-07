@@ -36,7 +36,7 @@ SLOT="0"
 DEPEND=">=sys-libs/libselinux-${SELNX_VER}:=[python]
 	>=sys-libs/libsemanage-${SEMNG_VER}:=[python]
 	>=sys-libs/libsepol-${SEPOL_VER}:=
-	>=app-admin/setools-4.2.0[${PYTHON_USEDEP}]
+	app-admin/setools[${PYTHON_USEDEP}]
 	dev-python/ipy[${PYTHON_USEDEP}]
 	!dev-python/sepolgen
 	${PYTHON_DEPS}"
