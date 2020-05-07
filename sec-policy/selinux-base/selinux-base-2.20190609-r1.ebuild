@@ -117,7 +117,8 @@ src_compile() {
 
 	for i in ${POLICY_TYPES}; do
 		cd "${S}/${i}" || die
-		emake base UNK_PERMS=allow BINDIR="${ROOT}/usr/bin" || die "${i} compile failed"
+		emake base UNK_PERMS=allow BINDIR="${ROOT}/usr/bin" \
+			LD_LIBRARY_PATH="${ROOT}/usr/lib64:${LD_LIBRARY_PATH}" || die "${i} compile failed"
 		if use doc; then
 			emake html
 		fi
