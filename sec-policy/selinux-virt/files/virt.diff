@@ -1,13 +1,13 @@
-diff -u contrib.orig/virt.te contrib/virt.te
---- modules/contrib.orig/virt.te	2016-02-20 13:18:44.670955920 -0800
-+++ modules/contrib/virt.te	2016-02-20 13:22:24.186318856 -0800
+diff -u a/services/virt.te b/services/virt.te
+--- a/services/virt.te	2016-02-20 13:18:44.670955920 -0800
++++ b/services/virt.te	2016-02-20 13:22:24.186318856 -0800
 @@ -1299,3 +1299,32 @@
  
- virt_append_log(virtlockd_t)
- virt_read_config(virtlockd_t)
+ virt_manage_log(virtlogd_t)
+ virt_read_config(virtlogd_t)
 +
 +require {
-+        type kernel_t;
++	type kernel_t;
 +	type tmpfs_t;
 +	type var_lib_t;
 +}
