@@ -70,7 +70,6 @@ RDEPEND="${RDEPEND}
 	sys-apps/dbus[selinux?]
 	sys-apps/systemd[selinux?]
 	selinux? (
-		sec-policy/container-selinux
 		sec-policy/selinux-virt
 	)"
 
